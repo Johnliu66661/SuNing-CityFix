@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="{{ 'zh-CN' if current_locale.startswith('zh') else 'en' }}">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ 'SuNing CityFix · 城市智修系统' if current_locale.startswith('zh') else 'SuNing CityFix · Smart Urban Repair System' }}</title>
+<link rel="icon" href="/static/img/suning-cityfix-logo.png">
+<link rel="apple-touch-icon" href="/static/img/suning-cityfix-logo.png">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+
+
+  <!-- 前端可用的翻译字典（给纯 JS 用） -->
+  <script>
+    window.I18N = {
+      no_data: "{{ _('暂无数据') }}",
+      signed_in_as: "{{ _('已登录：') }}",
+      current_role_label: "{{ _('当前身份：') }}",
+      role_admin: "{{ _('管理员') }}",
+      role_maintainer: "{{ _('维护员') }}",
+      role_user: "{{ _('用户') }}",
+      unit_day: "{{ _('天') }}",
+      unit_hour: "{{ _('小时') }}",
+      status: "{{ _('状态') }}",
+      type_contains: "{{ _('类型包含') }}",
+      desc_contains: "{{ _('描述包含') }}",
+      created: "{{ _('创建时间') }}",
+      updated: "{{ _('更新时间') }}",
+      sort_field: "{{ _('排序字段') }}",
+      sort_order: "{{ _('排序方式') }}",
+      apply_filters: "{{ _('应用筛选') }}",
+    };
+  </script>
+
+  <!-- 全局样式 -->
+  <link rel="stylesheet" href="/static/css/style.css" />
+
+  <!-- Leaflet 样式（含本地回退） -->
+  <link rel="preload" as="style" href="https://cdn.staticfile.org/leaflet/1.9.4/leaflet.css">
+  <link id="leaflet-css" rel="stylesheet" href="https://cdn.staticfile.org/leaflet/1.9.4/leaflet.css"
+        onerror="this.href='/static/leaflet/leaflet.css'"/>
+
+  <!-- 主页少量补充样式（不改你的 style.css 文件） -->
+  <style>
+    .site-nav{ display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    .brand{ font-weight:800; font-size:18px; letter-spacing:.2px; display:flex; align-items:center; gap:8px; }
+    .nav-links{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .nav-links a{ text-decoration:none; color:var(--text); border:1px solid var(--border); padding:8px 12px; border-radius:999px; }
+    .nav-links a:hover{ background:#f3f6fb; }
+
+    .hero{
+      position: relative; overflow: hidden; border-radius: var(--radius-lg);
+      background: radial-gradient(1000px 400px at 10% -10%, #e9f2ff 0%, transparent 60%),
+                  radial-gradient(800px 320px at 120% 10%, #e6fff5 0%, transparent 60%),
+                  linear-gradient(180deg, #f7fbff, #ffffff);
+      margin-bottom:14px; padding: 20px;
+    }
+    .hero-grid{ display:grid; grid-template-columns: 1.4fr 1fr; gap:18px; align-items:center; }
+    @media (max-width: 900px){ .hero-grid{ grid-template-columns:1fr; } }
+    .hero-copy h1{ font-size: clamp(26px, 3.6vw, 40px); margin:8px 0; }
+    .hero-badge{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 12px; border:1px solid var(--border); border-radius:999px; background:#f8fafc;
+      font-size:13px; color:var(--muted); margin-bottom:8px;
+    }
+    .hero-illus{
+      height: 240px; border:1px dashed var(--border); border-radius: var(--radius-lg);
+      background: linear-gradient(135deg, #eef3ff, #f7fcff);
+      display:flex; align-items:center; justify-content:center; color:#6b7280; font-weight:700;
+    }
+
+    .features{ display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+    .feature{ padding:14px; border:1px solid var(--border); border-radius:var(--radius); background:var(--panel); box-shadow: var(--shadow); }
+    .feature h4{ display:flex; align-items:center; gap:8px; margin:0 0 6px; }
+
+    .steps{ display:grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap:14px; margin-top:14px; }
+    .step{ padding:14px; border:1px dashed var(--border); border-radius: var(--radius); background:#f8fafc; }
+    .step b{ font-size:22px; margin-right:8px; color: var(--primary); }
+
+    .stats{ display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-top:14px; }
+    .stat{ text-align:center; padding:18px; border:1px solid var(--border); border-radius:var(--radius); background:var(--panel); box-shadow: var(--shadow); }
+    .stat .num{ font-size:28px; font-weight:900; color: var(--primary); }
+
+    .foot{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:13px; color:var(--muted); }
+    .reveal{ opacity:0; transform: translateY(8px); transition: opacity .5s ease, transform .5s ease; }
+    .reveal.in{ opacity:1; transform:none; }
+
+    .link-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+    .link-row a{ font-size:13px; color:var(--primary); text-decoration:none; }
+    .link-row a:hover{ text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- 顶部导航 -->
+    <header class="section">
+      <div class="site-nav">
+        <div class="brand">
+  <img class="brand-logo" src="/static/img/suning-cityfix-logo.png" alt="SuNing CityFix logo" />
+  <span class="brand-name">
+    {{ 'SuNing CityFix · 城市智修系统' if current_locale.startswith('zh') else 'SuNing CityFix · Smart Urban Repair System' }}
+  </span>
+</div>
+
+        <nav class="nav-links">
+          <a href="#home"  id="link-home"  data-nav="home">{{ _('首页') }}</a>
+          <a href="#app"   id="link-app"   data-nav="app"  class="hidden">{{ _('进入系统') }}</a>
+          <a href="#login" id="link-login" data-nav="login">{{ _('登录/注册') }}</a>
+          {% include '_lang_switch.html' %}
+        </nav>
+      </div>
+    </header>
+
+    <!-- 主页 -->
+    <section id="home-section" class="section reveal">
+      <div class="hero">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <span class="hero-badge">{{ _('可靠 · 高效 · 可视化') }}</span>
+<h1>
+  {{ 'SuNing CityFix · 城市智修系统' if current_locale.startswith('zh') else 'SuNing CityFix · Smart Urban Repair System' }}
+</h1>
+
+            <p>{{ _('从居民上报到维护闭环，支持地图定位、工单流转、权限控制与图片留存。开箱即用，轻量部署。') }}</p>
+
+            <!-- 未登录 CTA -->
+            <div class="hero-cta" id="cta-guest" style="display:flex; gap:12px; flex-wrap:wrap; margin-top:6px;">
+              <a class="btn btn-primary" href="#login" data-nav="login">{{ _('登录 / 注册') }}</a>
+            </div>
+
+            <!-- 已登录 CTA -->
+            <div class="hero-cta hidden" id="cta-authed" style="display:flex; gap:12px; flex-wrap:wrap; margin-top:6px;">
+              <span class="hero-badge" id="badge-logged">{{ _('已登录') }}</span>
+              <a class="btn btn-primary" href="#app" data-nav="app">{{ _('进入系统') }}</a>
+            </div>
+          </div>
+
+          <div class="hero-illus mesh-bg" aria-hidden="true"></div>
+          <!-- 轻量插画 -->
+          <svg viewBox="0 0 560 240" width="100%" height="100%" aria-hidden="true">
+            <defs>
+              <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#60a5fa"/>
+                <stop offset="1" stop-color="#22c55e"/>
+              </linearGradient>
+              <radialGradient id="dot" r="1">
+                <stop offset="0" stop-color="#fff" stop-opacity="1"/>
+                <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <g opacity="0.15" stroke="url(#g1)">
+              <path d="M0 40H560 M0 80H560 M0 120H560 M0 160H560 M0 200H560" />
+              <path d="M40 0V240 M80 0V240 M120 0V240 M160 0V240 M200 0V240 M240 0V240
+                       M280 0V240 M320 0V240 M360 0V240 M400 0V240 M440 0V240 M480 0V240 M520 0V240" />
+            </g>
+            <path d="M0,170 C100,120 180,210 280,160 C380,110 460,190 560,140" fill="none" stroke="url(#g1)" stroke-width="3" opacity=".9"/>
+            <path d="M0,115 C110,95 180,140 280,115 C390,90 470,130 560,105" fill="none" stroke="url(#g1)" stroke-width="2" opacity=".6"/>
+            <g opacity=".9">
+              <circle cx="120" cy="120" r="2.6" fill="#fff"/>
+              <circle cx="220" cy="90"  r="2.2" fill="#fff"/>
+              <circle cx="310" cy="150" r="2.4" fill="#fff"/>
+              <circle cx="420" cy="110" r="2.6" fill="#fff"/>
+              <circle cx="500" cy="140" r="2.2" fill="#fff"/>
+            </g>
+            <g opacity=".35">
+              <circle cx="220" cy="90"  r="40" fill="url(#dot)"/>
+              <circle cx="420" cy="110" r="44" fill="url(#dot)"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <div class="features reveal extra-content">
+        <div class="feature"><h4>🗺️ {{ _('地图定位') }}</h4><p>{{ _('Leaflet + OSM，支持坐标与照片 EXIF 自动获取。') }}</p></div>
+        <div class="feature"><h4>🔐 {{ _('权限清晰') }}</h4><p>{{ _('管理员 / 维护员 / 用户多角色，JWT 鉴权。') }}</p></div>
+        <div class="feature"><h4>⚡ {{ _('流程闭环') }}</h4><p>{{ _('上报—指派—完工图—归档，事件时间线可追溯。') }}</p></div>
+        <div class="feature"><h4>📦 {{ _('轻松部署') }}</h4><p>{{ _('Flask + SQLite 开箱即用，可升级到生产数据库。') }}</p></div>
+      </div>
+
+      <div class="steps reveal extra-content">
+        <div class="step"><p><b>1</b> {{ _('登录/注册后填写问题、位置与照片，一键提交。') }}</p></div>
+        <div class="step"><p><b>2</b> {{ _('管理端指派维护员，实时跟踪状态变化。') }}</p></div>
+        <div class="step"><p><b>3</b> {{ _('维护完成上传完工图，自动归档。') }}</p></div>
+      </div>
+
+      <div class="stats reveal extra-content">
+        <div class="stat"><div class="num" data-count-to="1280">0</div><div class="small">{{ _('累计报修') }}</div></div>
+        <div class="stat"><div class="num" data-count-to="96">0</div><div class="small">{{ _('完成率（%）') }}</div></div>
+        <div class="stat"><div class="num" data-count-to="3.2">0</div><div class="small">{{ _('平均处理天数') }}</div></div>
+      </div>
+    </section>
+
+    <!-- 平台亮点 -->
+    <div class="highlights section-mini reveal extra-content">
+      <div class="hi-grid">
+        <article class="hi card">
+          <h4>📍 {{ _('开箱即用的地图上报') }}</h4>
+          <p>{{ _('一键获取坐标与 EXIF，手机端自适应，现场即可提交。') }}</p>
+        </article>
+        <article class="hi card">
+          <h4>🧭 {{ _('全角色闭环') }}</h4>
+          <p>{{ _('管理员指派、维护员回执、居民回访，时间线可追溯。') }}</p>
+        </article>
+        <article class="hi card">
+          <h4>🧱 {{ _('轻量可扩展') }}</h4>
+          <p>{{ _('Flask + SQLite 起步，支持 JWT、S3/OSS、Postgres 等升级。') }}</p>
+        </article>
+      </div>
+    </div>
+
+    <!-- 快速入门 -->
+    <div class="quickstart section-mini reveal extra-content" id="quickstart">
+      <h3 class="uc-title">{{ _('快速入门') }}</h3>
+      <ol class="qs-steps">
+        <li><b>1.</b> <a class="link" href="#register" data-nav="register">{{ _('注册账号') }}</a> {{ _('或') }} <a class="link" href="#login" data-nav="login">{{ _('登录') }}</a></li>
+        <li><b>2.</b> {{ _('在“提交报修”里填写类型/坐标/照片并提交') }}</li>
+        <li><b>3.</b> {{ _('管理端指派维护员并跟踪工单直至完结') }}</li>
+      </ol>
+      <div class="qs-actions">
+        <a class="btn btn-primary" href="#login" data-nav="login">{{ _('立即开始') }}</a>
+        <a class="btn btn-outline" href="#app" data-nav="app">{{ _('查看演示') }}</a>
+      </div>
+    </div>
+
+    <!-- 介绍视频 -->
+<div class="video-section section-mini reveal extra-content">
+  <div class="video-card">
+    <div class="video-wrap">
+      <button class="video-play" aria-label="{{ _('播放/暂停') }}">▶</button>
+      <video id="intro-video" preload="none" playsinline webkit-playsinline
+             poster="/static/img/intro-poster.jpg">
+        <source src="/static/media/intro.mp4" type="video/mp4">
+      </video>
+    </div>
+
+    <ul id="video-playlist" class="video-list" aria-label="{{ _('视频列表') }}">
+      <li class="is-active" role="button" tabindex="0"
+          data-src="/static/media/intro.mp4"
+          data-type="video/mp4"
+          data-poster="/static/img/intro-poster.jpg">
+        {{ _('平台介绍') }}
+      </li>
+      <li role="button" tabindex="0"
+          data-src="/static/media/tour.mp4"
+          data-type="video/mp4"
+          data-poster="/static/img/tour-poster.jpg">
+        {{ _('现场演示') }}
+      </li>
+    </ul>
+  </div>
+</div>
+
+
+    <!-- 用例轮播 -->
+    <div class="usecases section-mini reveal extra-content" aria-labelledby="cases-title">
+      <h3 id="cases-title" class="uc-title">{{ _('典型场景') }}</h3>
+      <div class="uc-carousel" id="case-carousel" aria-live="polite">
+        <div class="uc-track">
+          <article class="slide card">
+            <h4>{{ _('小区设施') }}</h4>
+            <p>{{ _('住户拍照上报路灯、井盖、电梯等，物业快速派工。') }}</p>
+          </article>
+          <article class="slide card">
+            <h4>{{ _('园区维保') }}</h4>
+            <p>{{ _('园区保修统一进系统，维保商按 SLA 响应。') }}</p>
+          </article>
+          <article class="slide card">
+            <h4>{{ _('城市部件') }}</h4>
+            <p>{{ _('市政热线流入工单、地图定位、多部门协同闭环。') }}</p>
+          </article>
+          <article class="slide card">
+            <h4>{{ _('校园后勤') }}</h4>
+            <p>{{ _('宿舍/教学楼报修标准化，暑期集中处理有据可查。') }}</p>
+          </article>
+        </div>
+        <div class="uc-dots" role="tablist" aria-label="{{ _('切换案例') }}">
+          <button class="dot is-active" data-slide="0" role="tab" aria-selected="true"><span class="sr-only">1</span></button>
+          <button class="dot" data-slide="1" role="tab" aria-selected="false"><span class="sr-only">2</span></button>
+          <button class="dot" data-slide="2" role="tab" aria-selected="false"><span class="sr-only">3</span></button>
+          <button class="dot" data-slide="3" role="tab" aria-selected="false"><span class="sr-only">4</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 用户评价 -->
+    <div class="testimonials section-mini reveal extra-content">
+      <div class="t-grid">
+        <figure class="t card">
+          <blockquote>“{{ _('报修效率显著提升，平均处理天数从 7 天降到 3 天。') }}”</blockquote>
+          <figcaption>— {{ _('新城物业运维经理') }}</figcaption>
+        </figure>
+        <figure class="t card">
+          <blockquote>“{{ _('手机一拍即报，定位准确，居民满意度更高了。') }}”</blockquote>
+          <figcaption>— {{ _('滨河街道网格员') }}</figcaption>
+        </figure>
+        <figure class="t card">
+          <blockquote>“{{ _('流程透明可追溯，绩效考核与 SLA 一一对应。') }}”</blockquote>
+          <figcaption>— {{ _('园区管委会信息科') }}</figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <!-- 结尾 CTA 横幅 -->
+    <div class="cta-band reveal extra-content">
+      <div class="cta-inner">
+        <h3>{{ _('马上试用 Smart Urban System') }}</h3>
+        <p class="small">{{ _('轻量部署 · 数据可控 · 支持二次开发') }}</p>
+        <div class="cta-actions">
+          <a class="btn btn-primary btn-lg" href="#login" data-nav="login">{{ _('免费注册') }}</a>
+          <a class="btn btn-outline btn-lg" href="#app" data-nav="app">{{ _('进入演示') }}</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 登录/注册 -->
+    <section id="login-section" class="section hidden reveal">
+      <h2>{{ _('身份认证') }}</h2>
+
+      <div class="auth-grid">
+        <!-- 普通用户登录 -->
+        <div id="user-login-section" class="auth-section card">
+          <form id="user-login-form">
+            <label>{{ _('用户名') }} <input id="user-username" type="text" required></label>
+            <label>{{ _('密码') }} <input id="user-password" type="password" required></label>
+            <button type="submit" class="btn btn-primary">{{ _('登录') }}</button>
+            <div id="user-login-message" class="message" style="display:none"></div>
+          </form>
+          <div class="link-row">
+            <a href="#maint" data-nav="maint">{{ _('维护员入口') }}</a>
+            <a href="#admin" data-nav="admin">{{ _('管理员入口') }}</a>
+            <a href="#register" data-nav="register">{{ _('注册账号') }}</a>
+          </div>
+        </div>
+
+        <!-- 维护员登录 -->
+        <div id="maintainer-login-section" class="auth-section card hidden">
+          <form id="maintainer-login-form">
+            <label>{{ _('维护员账号') }} <input id="maint-username" type="text" required></label>
+            <label>{{ _('密码') }} <input id="maint-password" type="password" required></label>
+            <button type="submit" class="btn btn-primary">{{ _('登录维护员') }}</button>
+            <div id="maint-login-message" class="message" style="display:none"></div>
+          </form>
+          <div class="link-row"><a href="#login" data-nav="login">{{ _('返回用户登录') }}</a></div>
+          <p class="small">{{ _('提示：管理员需先把该用户角色设为') }} <code>maintainer</code>。</p>
+        </div>
+
+        <!-- 管理员登录 -->
+        <div id="admin-login-section" class="auth-section card hidden">
+          <form id="admin-login-form">
+            <label>{{ _('管理员账号') }} <input id="admin-username" type="text" required></label>
+            <label>{{ _('密码') }} <input id="admin-password" type="password" required></label>
+            <button type="submit" class="btn btn-primary">{{ _('登录管理员') }}</button>
+            <div id="admin-login-message" class="message" style="display:none"></div>
+          </form>
+          <div class="link-row"><a href="#login" data-nav="login">{{ _('返回用户登录') }}</a></div>
+          <p class="small">{{ _('默认：admin / adminpass') }}</p>
+        </div>
+
+        <!-- 用户注册 -->
+        <div id="user-register-section" class="auth-section card hidden">
+          <form id="user-register-form">
+            <label>{{ _('用户名') }} <input id="reg-username" type="text" required></label>
+            <label>{{ _('密码') }} <input id="reg-password" type="password" required></label>
+            <label>{{ _('邮箱') }} <input id="reg-email" type="email" placeholder="{{ _('可选') }}"></label>
+            <button type="submit" class="btn btn-primary">{{ _('注册') }}</button>
+            <div id="register-message" class="message" style="display:none"></div>
+          </form>
+          <div class="link-row"><a href="#login" data-nav="login">{{ _('返回用户登录') }}</a></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 系统页 -->
+    <section id="main-app-section" class="section hidden reveal">
+      <div class="header">
+        <div class="whoami">
+          <span>👤</span><span id="whoami-text">{{ _('未登录') }}</span>
+        </div>
+        <button id="logout-button" class="btn" type="button">{{ _('退出登录') }}</button>
+      </div>
+
+      <!-- 维护员工具（按需显示） -->
+      <div id="maintainer-tools" class="section hidden" style="display:none;">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="assigned-only" checked>
+          {{ _('只看指派给我的工单') }}
+        </label>
+        <small>{{ _('管理员可在每条卡片内输入维护员用户名并“指派”。') }}</small>
+      </div>
+
+      <!-- 管理员工具（按需显示） -->
+      <div id="admin-tools" class="section" style="display:none;">
+        <h4>{{ _('管理员工具') }}</h4>
+        <div class="card" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <label>{{ _('用户名') }}
+            <input id="set-maint-username" type="text" placeholder="{{ _('输入已有用户名') }}" />
+          </label>
+          <button id="set-maint-btn" class="btn btn-primary" type="button">{{ _('设为维护员') }}</button>
+          <div id="set-maint-msg" class="message" style="display:none"></div>
+        </div>
+        <p class="small" style="color:#6b7280;">{{ _('提示：目标用户需已注册；设置成功后该用户需重新登录。') }}</p>
+      </div>
+
+      <!-- 运行仪表盘 -->
+      <section id="dashboard" class="section reveal" aria-labelledby="dash-title">
+        <div class="dash-head">
+          <div>
+            <h2 id="dash-title">{{ _('运行仪表盘') }}</h2>
+            <div id="dash-updated" class="small" aria-live="polite">{{ _('更新于 ——') }}</div>
+          </div>
+          <div class="chip-row" role="group" aria-label="{{ _('时间范围') }}">
+            <button class="chip" data-range="7d"  aria-pressed="true">{{ _('近 7 天') }}</button>
+            <button class="chip" data-range="30d" aria-pressed="false">{{ _('近 30 天') }}</button>
+            <button class="chip" data-range="90d" aria-pressed="false">{{ _('近 90 天') }}</button>
+          </div>
+        </div>
+
+        <!-- KPI 6 卡 -->
+        <div class="kpi-grid" id="kpi-grid">
+          <div class="kpi-card card">
+            <div class="kpi-name">{{ _('报修量') }}</div>
+            <div class="kpi-value" id="kpi-tickets">—</div>
+            <div class="kpi-trend" id="kpi-tickets-trend"><span class="sr-only">{{ _('环比') }}</span>—</div>
+            <svg class="spark" id="spark-tickets" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+          <div class="kpi-card card">
+            <div class="kpi-name">{{ _('首次响应中位数') }}</div>
+            <div class="kpi-value" id="kpi-frt">—</div>
+            <div class="kpi-trend" id="kpi-frt-trend">—</div>
+            <svg class="spark" id="spark-frt" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+          <div class="kpi-card card">
+            <div class="kpi-name">{{ _('修复中位数') }}</div>
+            <div class="kpi-value" id="kpi-mttr">—</div>
+            <div class="kpi-trend" id="kpi-mttr-trend">—</div>
+            <svg class="spark" id="spark-mttr" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+          <div class="kpi-card card">
+            <div class="kpi-name">{{ _('SLA 达成率') }}</div>
+            <div class="kpi-value" id="kpi-sla">—</div>
+            <div class="kpi-trend" id="kpi-sla-trend">—</div>
+            <svg class="spark" id="spark-sla" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+          <div class="kpi-card card">
+            <div class="kpi-name">{{ _('未结工单') }}</div>
+            <div class="kpi-value" id="kpi-open">—</div>
+            <div class="kpi-trend" id="kpi-open-trend">—</div>
+            <svg class="spark" id="spark-open" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+          <div class="kpi-card card">
+            <div class="kpi-name">{{ _('逾期工单') }}</div>
+            <div class="kpi-value" id="kpi-overdue">—</div>
+            <div class="kpi-trend" id="kpi-overdue-trend">—</div>
+            <svg class="spark" id="spark-overdue" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+        </div>
+
+        <!-- 中区 -->
+        <div class="dash-grid">
+          <section class="chart-card card col-8" aria-labelledby="trend-title">
+            <h3 id="trend-title">{{ _('报修与时长趋势') }}</h3>
+            <svg id="line-trend" viewBox="0 0 600 240" preserveAspectRatio="none" role="img" aria-label="{{ _('最近趋势') }}"></svg>
+          </section>
+
+          <aside class="chart-card card col-4" aria-labelledby="alerts-title">
+            <h3 id="alerts-title">{{ _('告警') }}</h3>
+            <div id="alerts" class="alert-list" aria-live="polite">
+              <div class="skeleton" style="height:60px;"></div>
+              <div class="skeleton" style="height:60px;"></div>
+            </div>
+          </aside>
+
+          <section class="chart-card card col-8" aria-labelledby="types-title">
+            <h3 id="types-title">{{ _('类型分布') }}</h3>
+            <div id="types-bars" class="type-bars"></div>
+          </section>
+
+          <section class="table-wrap col-12" aria-labelledby="latest-title">
+            <h3 id="latest-title" style="padding:10px 12px; margin:0;">{{ _('最新工单（示例）') }}</h3>
+            <table class="table" aria-describedby="latest-title">
+              <thead>
+                <tr>
+                  <th>{{ _('编号') }}</th>
+                  <th>{{ _('类型') }}</th>
+                  <th>{{ _('状态') }}</th>
+                  <th>{{ _('区域') }}</th>
+                  <th>SLA</th>
+                </tr>
+              </thead>
+              <tbody id="latest-body">
+                <tr><td colspan="5"><div class="skeleton" style="height:32px;"></div></td></tr>
+                <tr><td colspan="5"><div class="skeleton" style="height:32px;"></div></td></tr>
+              </tbody>
+            </table>
+          </section>
+        </div>
+      </section>
+
+      <h3>{{ _('提交报修') }}</h3>
+      <form id="report-form" class="card">
+        <label style="display:flex;align-items:center;gap:8px;margin:6px 0 4px;">
+  <input type="checkbox" id="auto-ai" checked>
+  <span>自动识别图片并填写类型与描述</span>
+</label>
+<div id="ai-hint" class="message" style="display:none;"></div>
+
+        <label>{{ _('报修类型') }} <input type="text" name="report_type" placeholder="{{ _('如：路灯、电梯、供水...') }}" required></label>
+        <label>{{ _('描述') }} <textarea name="description" placeholder="{{ _('请描述问题...') }}" required></textarea></label>
+        <div class="grid-2">
+          <label>{{ _('纬度') }} <input type="number" name="latitude" step="0.000001" required></label>
+          <label>{{ _('经度') }} <input type="number" name="longitude" step="0.000001" required></label>
+        </div>
+        <label>{{ _('现场照片（可选）') }}<input type="file" name="photo" accept="image/*"></label>
+        <button type="submit" class="btn btn-primary">{{ _('提交报修') }}</button>
+        <div id="report-message" class="message" style="display:none"></div>
+      </form>
+
+      <!-- 报修区：筛选（卡片） + 地图（在上） + 列表（卡片，含分页） -->
+      <div id="reports-layout" class="reports-layout">
+
+        <!-- 筛选条：卡片 -->
+        <div id="filter-sort-controls" class="card">
+          <div class="toolbar">
+            <div class="group">
+              <label for="filter-status">{{ _('状态') }}</label>
+              <select id="filter-status">
+                <option value="All">{{ _('全部') }}</option>
+                <option value="Pending">{{ _('待处理') }}</option>
+                <option value="In Progress">{{ _('处理中') }}</option>
+                <option value="Completed">{{ _('已完成') }}</option>
+                <option value="Rejected">{{ _('已拒绝') }}</option>
+              </select>
+            </div>
+            <div class="group">
+              <label for="filter-report-type">{{ _('类型包含') }}</label>
+              <input id="filter-report-type" type="text" placeholder="{{ _('例如：路灯') }}">
+            </div>
+            <div class="group">
+              <label for="search-description">{{ _('描述包含') }}</label>
+              <input id="search-description" type="text" placeholder="{{ _('关键词') }}">
+            </div>
+            <div class="group">
+              <label for="sort-by">{{ _('排序字段') }}</label>
+              <select id="sort-by">
+                <option value="created_at" selected>{{ _('创建时间') }}</option>
+                <option value="updated_at">{{ _('更新时间') }}</option>
+                <option value="status">{{ _('状态') }}</option>
+              </select>
+            </div>
+            <div class="group">
+              <label for="sort-order">{{ _('排序方式') }}</label>
+              <select id="sort-order">
+                <option value="desc" selected>{{ _('降序') }}</option>
+                <option value="asc">{{ _('升序') }}</option>
+              </select>
+            </div>
+
+            <div class="group actions">
+              <label style="display:flex;align-items:center;gap:8px;margin:0;">
+                <input type="checkbox" id="toggle-map" checked> {{ _('显示地图') }}
+              </label>
+              <button id="apply-filters-button" class="btn btn-primary btn-lg" type="button">{{ _('应用筛选') }}</button>
+              <div class="segmented" id="view-toggle" role="tablist" aria-label="{{ _('视图切换') }}" style="display:none">
+                <button data-view="cards" class="active" role="tab" aria-selected="true" type="button">{{ _('卡片') }}</button>
+                <button data-view="table" role="tab" aria-selected="false" type="button">{{ _('表格') }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 地图在上 -->
+        <section id="map-section" class="card map-card">
+          <h4 class="list-title">{{ _('问题地图') }}</h4>
+          <div id="map"></div>
+        </section>
+
+        <!-- 报修列表被框起来，底部内置分页 -->
+        <section id="list-section" class="card list-card">
+          <h4 class="list-title">{{ _('报修列表') }}</h4>
+          <div id="reports-list"></div>
+
+          <div id="pagination-controls" class="pagination-section hidden">
+            <button id="prev-page" class="btn" type="button">{{ _('上一页') }}</button>
+            <span id="page-info">{{ _('页码') }} 1 / 1</span>
+            <button id="next-page" class="btn" type="button">{{ _('下一页') }}</button>
+          </div>
+        </section>
+      </div>
+    </section>
+
+<footer class="section foot">
+  <div>© 2025 SuNing CityFix</div>
+      <div class="small">{{ _('Made with Flask · Leaflet · OSM') }}</div>
+    </footer>
+  </div>
+
+  <!-- 你的业务脚本 -->
+  <script src="/static/js/script.js" defer></script>
+
+  <!-- Ripple 效果（轻量） -->
+  <script>
+    (function () {
+      const selector = '.btn, button[data-action], #prev-page, #next-page';
+      document.addEventListener('click', function (e) {
+        const el = e.target.closest(selector);
+        if (!el) return;
+        const r = document.createElement('span');
+        r.className = 'ripple';
+        const rect = el.getBoundingClientRect();
+        const d = Math.max(rect.width, rect.height);
+        r.style.width = r.style.height = d + 'px';
+        r.style.left = (e.clientX - rect.left - d / 2) + 'px';
+        r.style.top  = (e.clientY - rect.top  - d / 2) + 'px';
+        el.appendChild(r);
+        setTimeout(() => r.remove(), 700);
+      }, { passive: true });
+    })();
+  </script>
+
+  <!-- 英雄区柔光晕 -->
+  <script>
+    (function(){
+      const hero = document.querySelector('.hero');
+      if(!hero) return;
+      function setPos(x, y){
+        const r = hero.getBoundingClientRect();
+        const mx = ((x - r.left)/r.width * 100).toFixed(2) + '%';
+        const my = ((y - r.top)/r.height * 100).toFixed(2) + '%';
+        hero.style.setProperty('--mx', mx);
+        hero.style.setProperty('--my', my);
+      }
+      hero.addEventListener('mousemove', e=> setPos(e.clientX, e.clientY), {passive:true});
+      hero.addEventListener('touchmove', e=> { const t = e.touches[0]; if(t) setPos(t.clientX, t.clientY); }, {passive:true});
+      const r = hero.getBoundingClientRect(); setPos(r.left + r.width*0.3, r.top + r.height*0.22);
+    })();
+  </script>
+
+  <!-- 注册 Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/static/sw.js').catch(console.error);
+    }
+  </script>
+
+  <!-- app-mode 切换 & 刷新兜底 -->
+  <script>
+    document.addEventListener('click', (e)=>{
+      const a = e.target.closest('[data-nav]'); if(!a) return;
+      const nav = a.getAttribute('data-nav');
+      if (nav === 'app')  document.documentElement.classList.add('app-mode');
+      if (nav === 'home' || nav === 'login') document.documentElement.classList.remove('app-mode');
+    });
+    document.getElementById('logout-button')?.addEventListener('click', ()=>{
+      document.documentElement.classList.remove('app-mode');
+    });
+    function applyModeOnLoad(){
+      if (location.hash === '#app') document.documentElement.classList.add('app-mode');
+      if (location.hash === '#home' || location.hash === '#login') document.documentElement.classList.remove('app-mode');
+    }
+    applyModeOnLoad();
+    window.addEventListener('hashchange', applyModeOnLoad);
+  </script>
+
+  <!-- 地图增强 -->
+  <script>
+    (function(){
+      const mapSection = document.getElementById('map-section');
+      const toggle = document.getElementById('toggle-map');
+      const listEl = document.getElementById('reports-list');
+
+      function safeInvalidate(){ if (window.__SUS_MAP && __SUS_MAP.invalidateSize) setTimeout(()=>__SUS_MAP.invalidateSize(), 120); }
+
+      if (toggle && mapSection){
+        const apply = () => { mapSection.style.display = toggle.checked ? '' : 'none'; if (toggle.checked) safeInvalidate(); };
+        toggle.addEventListener('change', apply); apply();
+      }
+
+      function getFirstItemLatLng(){
+        const first = listEl?.querySelector('.report-item[data-lat][data-lng]');
+        if (first) return [parseFloat(first.dataset.lat), parseFloat(first.dataset.lng)];
+        return null;
+      }
+
+      function tryInitMap(center){
+        if (!window.L) return;
+        const el = document.getElementById('map');
+        if (!el || el._leaflet_id) return;
+        const c = center || [31.2304, 121.4737];
+        const map = L.map(el).setView(c, 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+        const marker = L.marker(c).addTo(map);
+        window.__SUS_MAP = map;
+        window.__SUS_MARKER = marker;
+        safeInvalidate();
+      }
+
+      const mo = new MutationObserver(()=>{
+        const ll = getFirstItemLatLng();
+        if (ll && window.__SUS_MAP){
+          window.__SUS_MARKER?.setLatLng(ll);
+          window.__SUS_MAP.setView(ll, Math.max(__SUS_MAP.getZoom(), 13), {animate:true});
+        } else if (ll && !window.__SUS_MAP){
+          tryInitMap(ll);
+        }
+      });
+      if (listEl) mo.observe(listEl, {childList:true, subtree:true});
+
+      if (document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', ()=>{ tryInitMap(getFirstItemLatLng()); });
+      } else {
+        tryInitMap(getFirstItemLatLng());
+      }
+
+      document.addEventListener('click', (e)=>{
+        const card = e.target.closest('#reports-list .report-item[data-lat][data-lng]'); if(!card) return;
+        const lat = parseFloat(card.dataset.lat), lng = parseFloat(card.dataset.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng) && window.__SUS_MAP){
+          window.__SUS_MARKER?.setLatLng([lat,lng]);
+          window.__SUS_MAP.setView([lat,lng], Math.max(__SUS_MAP.getZoom(), 13), {animate:true});
+        }
+      });
+
+      window.addEventListener('resize', safeInvalidate);
+    })();
+  </script>
+
+  <!-- 离线提示 -->
+  <div id="offline-toast" hidden class="card" style="position:fixed;right:16px;bottom:16px;padding:10px 12px;z-index:9999;">
+    {{ _('已离线，已保存到本地，联网后自动提交。') }}
+  </div>
+
+  <!-- Dashboard Demo Seeder（i18n 已接入） -->
+  <script>
+  (function(){
+    const dash = document.getElementById('dashboard');
+    if(!dash) return;
+
+    // 随语言切换的数字本地化
+    const NUM_LOCALE = '{{ "zh-CN" if current_locale.startswith("zh") else "en-US" }}';
+    const fmt = (n)=> Number(n).toLocaleString(NUM_LOCALE);
+
+    // 英文状态码 → 本地化显示文本
+    const tStatus = (s)=> ({
+      'Pending':     '{{ _("待处理") }}',
+      'In Progress': '{{ _("处理中") }}',
+      'Completed':   '{{ _("已完成") }}',
+      'Rejected':    '{{ _("已拒绝") }}',
+    }[s] || s);
+
+    const set = (id, v)=> { const el = document.getElementById(id); if(el) el.textContent = v; };
+
+    function genSeries(days){
+      const tickets = Array.from({length:days}, (_,i)=> Math.max(5, Math.round(25 + Math.sin(i/3)*6 + Math.random()*10)));
+      const frtHrs  = Array.from({length:days}, ()=> +(0.6 + Math.random()*1.2).toFixed(2));
+      const mttrD   = Array.from({length:days}, ()=> +(1.6 + Math.random()*1.8).toFixed(2));
+      const slaPct  = Array.from({length:days}, ()=> Math.min(99, Math.max(88, Math.round(92 + Math.random()*6))));
+      const open    = Math.round(40 + Math.random()*50);
+      const overdue = Math.round(3 + Math.random()*12);
+      const sum = (a)=> a.reduce((s,v)=>s+v,0);
+      const median = (a)=> { const b=[...a].sort((x,y)=>x-y); const m=Math.floor(b.length/2); return b.length%2?b[m]:(b[m-1]+b[m])/2; };
+      const total = sum(tickets);
+
+      return {
+        tickets, frtHrs, mttrD, slaPct, open, overdue, total,
+        kpi: {
+          tickets: total,
+          frt:  median(frtHrs).toFixed(2) + ' ' + (window.I18N?.unit_hour || 'h'),
+          mttr: median(mttrD).toFixed(2) + ' ' + (window.I18N?.unit_day  || 'd'),
+          sla: Math.round(sum(slaPct)/days) + '%',
+          open, overdue
+        }
+      };
+    }
+
+    function drawSpark(svgId, arr){
+      const svg = document.getElementById(svgId); if(!svg) return;
+      const w = 100, h = 30; svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      const min = Math.min(...arr), max = Math.max(...arr);
+      const norm = (v)=> max===min ? h/2 : h - (v-min)/(max-min) * (h-4) - 2;
+      const step = w/(arr.length-1 || 1);
+      let d = 'M 0 '+norm(arr[0]);
+      arr.forEach((v,i)=> { d += ' L ' + (i*step).toFixed(2) + ' ' + norm(v).toFixed(2); });
+      while(svg.firstChild) svg.removeChild(svg.firstChild);
+      const area = document.createElementNS('http://www.w3.org/2000/svg','path');
+      area.setAttribute('class','area');
+      area.setAttribute('d', d + ` L ${w} ${h} L 0 ${h} Z`);
+      svg.appendChild(area);
+      const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d', d);
+      svg.appendChild(path);
+    }
+
+    function drawTrend(svgId, arrA, arrB){
+      const svg = document.getElementById(svgId); if(!svg) return;
+      const W = 600, H = 240; svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      const all = arrA.concat(arrB);
+      const min = Math.min(...all), max = Math.max(...all);
+      const pad = 14;
+      const xStep = (W- pad*2) / (arrA.length-1 || 1);
+      const scaleY = (v)=> max===min ? H/2 : H - pad - (v-min)/(max-min) * (H-pad*2);
+      while(svg.firstChild) svg.removeChild(svg.firstChild);
+      const mkPath = (arr)=> {
+        let d = `M ${pad} ${scaleY(arr[0]).toFixed(2)}`;
+        arr.forEach((v,i)=>{ d += ` L ${ (pad + i*xStep).toFixed(2)} ${ scaleY(v).toFixed(2)}`; });
+        return d;
+      };
+      const p1 = document.createElementNS('http://www.w3.org/2000/svg','path');
+      p1.setAttribute('d', mkPath(arrA)); p1.setAttribute('fill','none'); p1.setAttribute('stroke-width','2.2'); p1.setAttribute('stroke','currentColor'); p1.style.opacity = .9;
+      const p2 = document.createElementNS('http://www.w3.org/2000/svg','path');
+      p2.setAttribute('d', mkPath(arrB)); p2.setAttribute('fill','none'); p2.setAttribute('stroke-width','2'); p2.setAttribute('stroke','#10b981'); p2.style.opacity = .9;
+      svg.appendChild(p1); svg.appendChild(p2);
+    }
+
+    function trendText(cur, prev){
+      if(!prev || prev===0) return '—';
+      const pct = ((cur - prev) / prev) * 100;
+      const sign = pct >= 0 ? '+' : '';
+      const cls = pct >= 0 ? 'trend-up' : 'trend-down';
+      return `<span class="${cls}">${sign}${pct.toFixed(1)}%</span>`;
+    }
+
+    function render(rangeKey){
+      const days = ({'7d':7,'30d':30,'90d':90})[rangeKey] || 7;
+      const cur = genSeries(days);
+      const prev = genSeries(days);
+
+      const ts = new Date();
+      const upd = `${ts.getFullYear()}-${String(ts.getMonth()+1).padStart(2,'0')}-${String(ts.getDate()).padStart(2,'0')} ${String(ts.getHours()).padStart(2,'0')}:${String(ts.getMinutes()).padStart(2,'0')}`;
+      const updEl = document.getElementById('dash-updated');
+      if (updEl) updEl.textContent = `{{ _('更新于') }} ${upd}`;
+
+      set('kpi-tickets', fmt(cur.kpi.tickets));
+      set('kpi-frt',     cur.kpi.frt);
+      set('kpi-mttr',    cur.kpi.mttr);
+      set('kpi-sla',     cur.kpi.sla);
+      set('kpi-open',    fmt(cur.kpi.open));
+      set('kpi-overdue', fmt(cur.kpi.overdue));
+
+      const mapSet = (sel, html)=>{ const el=document.querySelector(sel); if(el) el.innerHTML=html; };
+      mapSet('#kpi-tickets-trend', trendText(cur.kpi.tickets, prev.kpi.tickets));
+      mapSet('#kpi-frt-trend',     trendText(parseFloat(cur.kpi.frt),  parseFloat(prev.kpi.frt)));
+      mapSet('#kpi-mttr-trend',    trendText(parseFloat(cur.kpi.mttr), parseFloat(prev.kpi.mttr)));
+      mapSet('#kpi-sla-trend',     trendText(parseInt(cur.kpi.sla),    parseInt(prev.kpi.sla)));
+      mapSet('#kpi-open-trend',    trendText(cur.kpi.open,             prev.kpi.open));
+      mapSet('#kpi-overdue-trend', trendText(cur.kpi.overdue,          prev.kpi.overdue));
+
+      drawSpark('spark-tickets', cur.tickets);
+      drawSpark('spark-frt',     cur.frtHrs);
+      drawSpark('spark-mttr',    cur.mttrD);
+      drawSpark('spark-sla',     cur.slaPct);
+      drawSpark('spark-open',    Array.from({length:days}, ()=> cur.open + Math.round((Math.random()-.5)*8)));
+      drawSpark('spark-overdue', Array.from({length:days}, ()=> cur.overdue + Math.round((Math.random()-.5)*4)));
+
+      const mttrScaled = cur.mttrD.map(v=> Math.round(v*15 + 10));
+      drawTrend('line-trend', cur.tickets, mttrScaled);
+
+      // 类型分布
+      const typesRoot = document.getElementById('types-bars');
+      if(typesRoot){
+        typesRoot.innerHTML = '';
+        const list = [
+          ['{{ _("路灯") }}', Math.round(cur.kpi.tickets*0.26)],
+          ['{{ _("电梯") }}', Math.round(cur.kpi.tickets*0.22)],
+          ['{{ _("供水") }}', Math.round(cur.kpi.tickets*0.18)],
+          ['{{ _("道路") }}', Math.round(cur.kpi.tickets*0.17)],
+          ['{{ _("绿化") }}', Math.round(cur.kpi.tickets*0.17)]
+        ];
+        const totalType = cur.kpi.tickets || 1;
+        list.forEach(([name, val])=>{
+          const pct = Math.round(val / totalType * 100);
+          const row = document.createElement('div'); row.className='type-row';
+          row.innerHTML = `
+            <div class="label">${name}</div>
+            <div class="bar"><i style="width:${pct}%"></i></div>
+            <div class="val">${Number(val).toLocaleString(NUM_LOCALE)}</div>
+          `;
+          typesRoot.appendChild(row);
+        });
+      }
+
+      // 最新工单（示例）——状态用本地化显示
+      const body = document.getElementById('latest-body');
+      if(body){
+        const types = ['{{ _("路灯") }}','{{ _("电梯") }}','{{ _("供水") }}','{{ _("道路") }}','{{ _("绿化") }}'];
+        const statusCodes = ['Pending','In Progress','Completed','Rejected'];
+        const areas  = ['{{ _("一网格") }}','{{ _("二网格") }}','{{ _("东区") }}','{{ _("南区") }}','{{ _("北区") }}','{{ _("园区") }}'];
+        const slaArr = ['24h','48h','72h'];
+        body.innerHTML = '';
+        for(let i=0;i<10;i++){
+          const id = `R${new Date().getFullYear()}-${String(Math.floor(Math.random()*9000)+1000)}`;
+          const s  = statusCodes[Math.floor(Math.random()*statusCodes.length)];
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>#${id}</td>
+                          <td>${types[Math.floor(Math.random()*types.length)]}</td>
+                          <td>${tStatus(s)}</td>
+                          <td>${areas[Math.floor(Math.random()*areas.length)]}</td>
+                          <td>${slaArr[Math.floor(Math.random()*slaArr.length)]}</td>`;
+          body.appendChild(tr);
+        }
+      }
+    }
+
+    document.querySelectorAll('#dashboard .chip').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll('#dashboard .chip').forEach(b=> b.setAttribute('aria-pressed','false'));
+        btn.setAttribute('aria-pressed','true');
+        render(btn.dataset.range || '7d');
+      });
+    });
+
+    render('7d');
+  })();
+  </script>
+
+  <!-- 隐藏特定内容：只在首页模式展示“宣传内容块” -->
+  <script>
+    (function(){
+      function showHomeExtras(){
+        const isHomeHash = (location.hash === '' || location.hash === '#home');
+        const inApp = document.documentElement.classList.contains('app-mode');
+        const shouldShow = isHomeHash && !inApp;
+        document.querySelectorAll('.extra-content').forEach(el=>{
+          el.style.display = shouldShow ? '' : 'none';
+        });
+      }
+      window.addEventListener('hashchange', showHomeExtras);
+      document.addEventListener('DOMContentLoaded', showHomeExtras);
+    })();
+  </script>
+</body>
+</html>

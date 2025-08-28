@@ -1,0 +1,9 @@
+name = "cityfix-ai-worker"
+main = "src/worker.js"
+compatibility_date = "2024-09-23"
+
+# 如果你要自定义路由（绑定自己的域名），后续可以加：
+# routes = [{ pattern = "ai.yourdomain.com/ai/vision", zone_name = "yourdomain.com" }]
+
+# 允许使用 formData/file
+assets = { not_found_handling = "none" }

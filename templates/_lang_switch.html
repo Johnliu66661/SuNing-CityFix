@@ -1,0 +1,10 @@
+<!-- templates/_lang_switch.html -->
+<nav class="lang-switch" style="margin: 0">
+  <a href="{{ url_for('set_language', lang='zh') }}" class="{{ 'active' if current_locale.startswith('zh') else '' }}">中文</a>
+  <span> | </span>
+  <a href="{{ url_for('set_language', lang='en') }}" class="{{ 'active' if current_locale.startswith('en') else '' }}">English</a>
+</nav>
+<style>
+  .lang-switch a { text-decoration: none; }
+  .lang-switch a.active { font-weight: 700; text-decoration: underline; }
+</style>
